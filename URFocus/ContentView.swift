@@ -45,7 +45,7 @@ struct ContentView: View {
         ScrollView {
             VStack(spacing: 20) {
                 // ======= Shared Goal Header =======
-                Text("UR Focus – Campus Goal")
+                Text("Campus Goal")
                     .font(.title2.bold())
                     .padding(.top, 8)
 
@@ -86,13 +86,25 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Session Length")
                         .font(.headline)
-                    Picker("Minutes", selection: $goalMinutes) {
-                        ForEach([5,10,15,20,25,30,45,60], id: \.self) { m in
-                            Text("\(m) min").tag(m)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    Slider(value: Binding(
+                        get: { Double(goalMinutes) },
+                        set: { goalMinutes = Int($0) }
+                    ), in: 1...120, step: 1)
+                    .accessibilityLabel("Minutes")
                     .disabled(isRunning && !isPaused)
+
+                    HStack {
+                        Text("1 min")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(goalMinutes) min")
+                            .font(.caption.bold())
+                        Spacer()
+                        Text("120 min")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal)
 
