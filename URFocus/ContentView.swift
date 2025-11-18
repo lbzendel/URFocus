@@ -17,7 +17,9 @@ struct ContentView: View {
 
     // MARK: - Persistent user settings
     @AppStorage("goalMinutes") private var goalMinutes: Int = 25
-    @AppStorage("streakDays") private var streakDays: Int = 0
+    @AppStorage("streakDays") private var streakDays: Int = 400
+    @AppStorage("coins") private var coins: Int = 0
+    @AppStorage("useMidnightBlueTheme") private var useMidnightBlueTheme: Bool = false
 
     // MARK: - Timer state
     @State private var isRunning = false
@@ -42,128 +44,145 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // ======= Shared Goal Header =======
-                Text("Campus Goal")
-                    .font(.title2.bold())
-                    .padding(.top, 8)
+        NavigationStack {
+            ZStack {
+                (useMidnightBlueTheme ? Color.blue.opacity(0.2) : Color(.systemBackground))
+                    .ignoresSafeArea()
 
-                if let g = goalMgr.goal {
-                    SharedProgressView(goal: g)
-                } else {
-                    ProgressView().padding(.vertical, 8)
-                }
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // ======= Shared Goal Header =======
+                        Text("Campus Goal")
+                            .font(.title2.bold())
+                            .padding(.top, 8)
 
-                Divider().padding(.vertical, 4)
+                        if let g = goalMgr.goal {
+                            SharedProgressView(goal: g)
+                        } else {
+                            ProgressView().padding(.vertical, 8)
+                        }
 
-                // ======= Personal Timer UI =======
-                Text("Your Session")
-                    .font(.title2.bold())
+                        Divider().padding(.vertical, 4)
 
-                ZStack {
-                    Circle()
-                        .stroke(urBlue.opacity(0.15), lineWidth: 20)
+                        // ======= Personal Timer UI =======
+                        Text("Your Session")
+                            .font(.title2.bold())
 
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(urYellow.gradient, style: StrokeStyle(lineWidth: 20, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .animation(.easeInOut(duration: 0.25), value: progress)
+                        ZStack {
+                            Circle()
+                                .stroke(urBlue.opacity(0.15), lineWidth: 20)
 
-                    VStack(spacing: 6) {
-                        Text(remainingSeconds.formattedClock)
-                            .font(.system(size: 36, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
+                            Circle()
+                                .trim(from: 0, to: progress)
+                                .stroke(urYellow.gradient, style: StrokeStyle(lineWidth: 20, lineCap: .round))
+                                .rotationEffect(.degrees(-90))
+                                .animation(.easeInOut(duration: 0.25), value: progress)
 
-                        Text(goalMinutesLabel)
-                            .font(.subheadline)
+                            VStack(spacing: 6) {
+                                Text(remainingSeconds.formattedClock)
+                                    .font(.system(size: 36, weight: .semibold, design: .rounded))
+                                    .monospacedDigit()
+
+                                Text(goalMinutesLabel)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(width: 260, height: 260)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Session Length")
+                                .font(.headline)
+                            Slider(value: Binding(
+                                get: { Double(goalMinutes) },
+                                set: { goalMinutes = Int($0) }
+                            ), in: 1...120, step: 1)
+                            .accessibilityLabel("Minutes")
+                            .disabled(isRunning && !isPaused)
+
+                            HStack {
+                                Text("1 min")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(goalMinutes) min")
+                                    .font(.caption.bold())
+                                Spacer()
+                                Text("120 min")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.horizontal)
+
+                        HStack(spacing: 12) {
+                            Button(action: startTapped) {
+                                Label(isPaused ? "Resume" : "Start", systemImage: isPaused ? "play.fill" : "timer")
+                            }
+                            .buttonStyle(FilledButtonStyle(color: urBlue))
+                            .disabled(isRunning && !isPaused)
+
+                            Button(action: pauseTapped) {
+                                Label("Pause", systemImage: "pause.fill")
+                            }
+                            .buttonStyle(FilledButtonStyle(color: .gray.opacity(0.5)))
+                            .disabled(!isRunning || isPaused)
+
+                            Button(role: .destructive, action: resetTapped) {
+                                Label("Reset", systemImage: "arrow.counterclockwise")
+                            }
+                            .buttonStyle(OutlinedButtonStyle())
+                            .disabled(!(isRunning || progress > 0))
+                        }
+                        .padding(.horizontal)
+
+                        HStack {
+                            Label("Streak: \(streakDays) day\(streakDays == 1 ? "" : "s")", systemImage: "flame.fill")
+                                .foregroundStyle(.orange)
+                            Spacer()
+                            if completedThisRun {
+                                Label("Nice!", systemImage: "checkmark.seal.fill")
+                                    .foregroundStyle(.green)
+                                    .transition(.scale.combined(with: .opacity))
+                            }
+                        }
+                        .font(.subheadline)
+                        .padding(.horizontal)
+
+                        Text("Tip: For hard-core detox, try iOS **Guided Access** (triple-click Side Button).")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
+                            .padding(.horizontal)
+                            .multilineTextAlignment(.center)
                     }
+                    .padding(.bottom, 24)
                 }
-                .frame(width: 260, height: 260)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Session Length")
-                        .font(.headline)
-                    Slider(value: Binding(
-                        get: { Double(goalMinutes) },
-                        set: { goalMinutes = Int($0) }
-                    ), in: 1...120, step: 1)
-                    .accessibilityLabel("Minutes")
-                    .disabled(isRunning && !isPaused)
-
-                    HStack {
-                        Text("1 min")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(goalMinutes) min")
-                            .font(.caption.bold())
-                        Spacer()
-                        Text("120 min")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal)
-
-                HStack(spacing: 12) {
-                    Button(action: startTapped) {
-                        Label(isPaused ? "Resume" : "Start", systemImage: isPaused ? "play.fill" : "timer")
-                    }
-                    .buttonStyle(FilledButtonStyle(color: urBlue))
-                    .disabled(isRunning && !isPaused)
-
-                    Button(action: pauseTapped) {
-                        Label("Pause", systemImage: "pause.fill")
-                    }
-                    .buttonStyle(FilledButtonStyle(color: .gray.opacity(0.5)))
-                    .disabled(!isRunning || isPaused)
-
-                    Button(role: .destructive, action: resetTapped) {
-                        Label("Reset", systemImage: "arrow.counterclockwise")
-                    }
-                    .buttonStyle(OutlinedButtonStyle())
-                    .disabled(!(isRunning || progress > 0))
-                }
-                .padding(.horizontal)
-
-                HStack {
-                    Label("Streak: \(streakDays) day\(streakDays == 1 ? "" : "s")", systemImage: "flame.fill")
-                        .foregroundStyle(.orange)
-                    Spacer()
-                    if completedThisRun {
-                        Label("Nice!", systemImage: "checkmark.seal.fill")
-                            .foregroundStyle(.green)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .font(.subheadline)
-                .padding(.horizontal)
-
-                Text("Tip: For hard-core detox, try iOS **Guided Access** (triple-click Side Button).")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
-                    .multilineTextAlignment(.center)
             }
-            .padding(.bottom, 24)
-        }
-        .onReceive(ticker) { t in
-            now = t
-            guard isRunning, !isPaused else { return }
-            if remainingSeconds <= 0 {
-                onCompleteSession()
+            .navigationTitle("UR Focus")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        ShopView()
+                    } label: {
+                        Label("Shop", systemImage: "cart")
+                    }
+                }
             }
+            .onReceive(ticker) { t in
+                now = t
+                guard isRunning, !isPaused else { return }
+                if remainingSeconds <= 0 {
+                    onCompleteSession()
+                }
+            }
+            .onAppear {
+                now = .now
+                ensureSignedInAnonymously() // optional
+                goalMgr.startListening()
+            }
+            .onDisappear { goalMgr.stopListening() }
+            .animation(.spring(response: 0.35, dampingFraction: 0.9), value: completedThisRun)
         }
-        .onAppear {
-            now = .now
-            ensureSignedInAnonymously() // optional
-            goalMgr.startListening()
-        }
-        .onDisappear { goalMgr.stopListening() }
-        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: completedThisRun)
     }
 
     // MARK: - Actions
@@ -210,6 +229,16 @@ struct ContentView: View {
         isPaused = false
         completedThisRun = true
         bumpStreakIfNeeded()
+        // Award coins based on session length
+        let m = Double(goalMinutes)
+        let base = 2.0 * m
+        let reward: Int
+        if m < 30 {
+            reward = Int(base)
+        } else {
+            reward = Int(floor(base * pow(1.1, m / 30.0)))
+        }
+        coins += max(reward, 0)
         notifyCompletion()
         hapticSuccess()
 
@@ -389,5 +418,78 @@ struct SharedProgressView: View {
         let h = s / 3600
         let m = (s % 3600) / 60
         return h > 0 ? "\(h)h" : "\(m)m"
+    }
+}
+
+struct ShopView: View {
+    @AppStorage("coins") private var coins: Int = 0
+    @AppStorage("useMidnightBlueTheme") private var useMidnightBlueTheme: Bool = false
+    struct ShopItem: Identifiable {
+        let id = UUID()
+        let name: String
+        let description: String
+        let cost: String
+    }
+
+    private let items: [ShopItem] = [
+        .init(name: "Focus Theme: Midnight Blue",
+              description: "A deep, calming color theme for late-night grinds.",
+              cost: "300 points"),
+        .init(name: "Sticker Pack: Study Gremlins",
+              description: "Silly little critters to cheer you on in the UI.",
+              cost: "500 points"),
+        .init(name: "Title: Library Goblin",
+              description: "Show off your streak with a goofy profile title.",
+              cost: "800 points")
+    ]
+
+    var body: some View {
+        List {
+            Section(header: Text("Your Balance")) {
+                HStack {
+                    Label("Coins: \(coins)", systemImage: "creditcard.circle.fill")
+                        .font(.headline)
+                }
+            }
+            Section(header: Text("UR Focus Shop")) {
+                ForEach(items) { item in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.name)
+                                    .font(.headline)
+                                Text(item.description)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(item.cost)
+                                .font(.caption.bold())
+                                .padding(6)
+                                .background(Color.yellow.opacity(0.2))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+
+                        HStack {
+                            Spacer()
+                            Button {
+                                // Simple purchase hook for the Midnight Blue theme
+                                if item.name == "Focus Theme: Midnight Blue" {
+                                    // Optionally check coins & deduct later; for now just apply the theme
+                                    useMidnightBlueTheme = true
+                                }
+                                // TODO: Hook up purchase logic for other items
+                            } label: {
+                                Label("Buy", systemImage: "cart.badge.plus")
+                            }
+                            .buttonStyle(FilledButtonStyle(color: Color.accentColor))
+                            Spacer()
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+        .navigationTitle("Shop")
     }
 }
