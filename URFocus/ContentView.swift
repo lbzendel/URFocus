@@ -17,8 +17,8 @@ struct ContentView: View {
 
     // MARK: - Persistent user settings
     @AppStorage("goalMinutes") private var goalMinutes: Int = 25
-    @AppStorage("streakDays") private var streakDays: Int = 400
-    @AppStorage("coins") private var coins: Int = 0
+    @AppStorage("streakDays") private var streakDays: Int = 0
+    @AppStorage("coins") private var coins: Int = 1000
     @AppStorage("useMidnightBlueTheme") private var useMidnightBlueTheme: Bool = false
 
     // MARK: - Timer state
@@ -422,25 +422,26 @@ struct SharedProgressView: View {
 }
 
 struct ShopView: View {
-    @AppStorage("coins") private var coins: Int = 0
+    @AppStorage("coins") private var coins: Int = 1000
     @AppStorage("useMidnightBlueTheme") private var useMidnightBlueTheme: Bool = false
+    @State private var showInsufficientFundsAlert = false
     struct ShopItem: Identifiable {
         let id = UUID()
         let name: String
         let description: String
-        let cost: String
+        let cost: Int
     }
 
     private let items: [ShopItem] = [
         .init(name: "Focus Theme: Midnight Blue",
               description: "A deep, calming color theme for late-night grinds.",
-              cost: "300 points"),
+              cost: 300),
         .init(name: "Sticker Pack: Study Gremlins",
               description: "Silly little critters to cheer you on in the UI.",
-              cost: "500 points"),
+              cost: 500),
         .init(name: "Title: Library Goblin",
               description: "Show off your streak with a goofy profile title.",
-              cost: "800 points")
+              cost: 800)
     ]
 
     var body: some View {
@@ -454,6 +455,9 @@ struct ShopView: View {
             Section(header: Text("UR Focus Shop")) {
                 ForEach(items) { item in
                     VStack(alignment: .leading, spacing: 8) {
+                        // Determine if this item is already owned (for now, just the Midnight Blue theme)
+                        let isOwned = (item.name == "Focus Theme: Midnight Blue") && useMidnightBlueTheme
+
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(item.name)
@@ -463,26 +467,50 @@ struct ShopView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Text(item.cost)
-                                .font(.caption.bold())
-                                .padding(6)
-                                .background(Color.yellow.opacity(0.2))
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text("\(item.cost) coins")
+                                    .font(.caption.bold())
+                                    .padding(6)
+                                    .background(Color.yellow.opacity(0.2))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                                if isOwned {
+                                    Text("Owned")
+                                        .font(.caption)
+                                        .foregroundStyle(.green)
+                                }
+                            }
                         }
 
                         HStack {
                             Spacer()
                             Button {
-                                // Simple purchase hook for the Midnight Blue theme
+                                // Prevent re-purchasing owned items
+                                if isOwned {
+                                    return
+                                }
+
+                                // Guard for insufficient funds
+                                guard coins >= item.cost else {
+                                    showInsufficientFundsAlert = true
+                                    return
+                                }
+
+                                // Deduct coins
+                                coins -= item.cost
+
+                                // Apply effects for purchased item(s)
                                 if item.name == "Focus Theme: Midnight Blue" {
-                                    // Optionally check coins & deduct later; for now just apply the theme
                                     useMidnightBlueTheme = true
                                 }
-                                // TODO: Hook up purchase logic for other items
+                                // TODO: Add unlock logic for other items
                             } label: {
-                                Label("Buy", systemImage: "cart.badge.plus")
+                                Label(isOwned ? "Owned" : "Buy",
+                                      systemImage: isOwned ? "checkmark.circle" : "cart.badge.plus")
                             }
                             .buttonStyle(FilledButtonStyle(color: Color.accentColor))
+                            .disabled(isOwned)
+                            .opacity(isOwned ? 0.6 : 1.0)
                             Spacer()
                         }
                     }
@@ -491,5 +519,10 @@ struct ShopView: View {
             }
         }
         .navigationTitle("Shop")
+        .alert("Not enough coins", isPresented: $showInsufficientFundsAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("You don’t have enough coins to buy this item yet. Complete more focus sessions to earn more.")
+        }
     }
 }
