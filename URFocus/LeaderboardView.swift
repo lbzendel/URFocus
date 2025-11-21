@@ -85,7 +85,7 @@ struct LeaderboardView: View {
                     )
                 } ?? []
                 DispatchQueue.main.async {
-                    self.topMinutes = entries
+                    self.topMinutes = entries as! [LeaderboardEntry]
                     didLoadMinutes = true
                     checkLoadingComplete()
                 }
@@ -105,7 +105,7 @@ struct LeaderboardView: View {
                     )
                 } ?? []
                 DispatchQueue.main.async {
-                    self.topStreaks = entries
+                    self.topStreaks = entries as! [LeaderboardEntry]
                     didLoadStreaks = true
                     checkLoadingComplete()
                 }

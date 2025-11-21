@@ -14,6 +14,7 @@ internal import Combine
 struct ContentView: View {
     // MARK: - Shared goal
     @StateObject private var goalMgr = SharedGoalManager.shared
+    @ObservedObject private var userMgr = UserManager.shared
 
     // MARK: - Persistent user settings
     @AppStorage("goalMinutes") private var goalMinutes: Int = 25
@@ -28,6 +29,13 @@ struct ContentView: View {
     @State private var targetDate: Date?
     @State private var now: Date = .now
     @State private var completedThisRun = false
+
+    // Added state for coin popup
+    @State private var showCoinPopup = false
+    @State private var coinsEarnedThisSession: Int = 0
+
+    // Added state for reset confirmation alert
+    @State private var showResetConfirmation = false
 
     // Ticker every second
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -119,19 +127,21 @@ struct ContentView: View {
                             Button(action: startTapped) {
                                 Label(isPaused ? "Resume" : "Start", systemImage: isPaused ? "play.fill" : "timer")
                             }
-                            .buttonStyle(FilledButtonStyle(color: urBlue))
+                            .buttonStyle(FilledButtonStyle(color: .green))
                             .disabled(isRunning && !isPaused)
 
                             Button(action: pauseTapped) {
                                 Label("Pause", systemImage: "pause.fill")
                             }
-                            .buttonStyle(FilledButtonStyle(color: .gray.opacity(0.5)))
+                            .buttonStyle(FilledButtonStyle(color: .yellow))
                             .disabled(!isRunning || isPaused)
 
-                            Button(role: .destructive, action: resetTapped) {
+                            Button(action: {
+                                showResetConfirmation = true
+                            }) {
                                 Label("Reset", systemImage: "arrow.counterclockwise")
                             }
-                            .buttonStyle(OutlinedButtonStyle())
+                            .buttonStyle(FilledButtonStyle(color: .red))
                             .disabled(!(isRunning || progress > 0))
                         }
                         .padding(.horizontal)
@@ -160,6 +170,13 @@ struct ContentView: View {
             }
             .navigationTitle("UR Focus")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink {
+                        LeaderboardView()
+                    } label: {
+                        Label("Leaderboard", systemImage: "list.number")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         ShopView()
@@ -169,8 +186,8 @@ struct ContentView: View {
                 }
             }
             .onReceive(ticker) { t in
-                now = t
                 guard isRunning, !isPaused else { return }
+                now = t
                 if remainingSeconds <= 0 {
                     onCompleteSession()
                 }
@@ -179,9 +196,79 @@ struct ContentView: View {
                 now = .now
                 ensureSignedInAnonymously() // optional
                 goalMgr.startListening()
+                if userMgr.username.isEmpty {
+                    userMgr.showUsernamePrompt = true
+                    userMgr.desiredUsername = ""
+                    userMgr.usernameError = nil
+                }
             }
             .onDisappear { goalMgr.stopListening() }
             .animation(.spring(response: 0.35, dampingFraction: 0.9), value: completedThisRun)
+            .alert("Session Complete", isPresented: $showCoinPopup) {
+                Button("OK", role: .cancel) {
+                    showCoinPopup = false
+                }
+            } message: {
+                Text("You earned \(coinsEarnedThisSession) coins!")
+            }
+            .alert("Are you sure you want to reset?", isPresented: $showResetConfirmation) {
+                Button("Yes") {
+                    resetTapped()
+                }
+                Button("No", role: .cancel) { }
+            }
+            .sheet(isPresented: $userMgr.showUsernamePrompt, onDismiss: {
+                // Prevent dismissal if no username set
+                if userMgr.username.isEmpty {
+                    userMgr.showUsernamePrompt = true
+                }
+            }) {
+                VStack(spacing: 20) {
+                    Text("Choose Your Username")
+                        .font(.title2.bold())
+
+                    TextField("Enter username", text: $userMgr.desiredUsername)
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(8)
+                        .autocapitalization(.none)
+                        .onSubmit {
+                            if !userMgr.desiredUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !userMgr.isCheckingUsername {
+                                userMgr.checkUsername()
+                            }
+                        }
+
+                    if let error = userMgr.usernameError {
+                        Text(error)
+                            .foregroundColor(.red)
+                            .font(.footnote)
+                    }
+
+                    Button(action: {
+                        userMgr.checkUsername()
+                    }) {
+                        if userMgr.isCheckingUsername {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                        } else {
+                            Text("Continue")
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(userMgr.desiredUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || userMgr.isCheckingUsername ? Color.gray : Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                        }
+                    }
+                    .disabled(userMgr.desiredUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || userMgr.isCheckingUsername)
+
+                    Spacer()
+                }
+                .padding()
+            }
         }
     }
 
@@ -228,7 +315,8 @@ struct ContentView: View {
         isRunning = false
         isPaused = false
         completedThisRun = true
-        bumpStreakIfNeeded()
+
+        let streakIncremented = bumpStreakIfNeeded()
         // Award coins based on session length
         let m = Double(goalMinutes)
         let base = 2.0 * m
@@ -239,11 +327,19 @@ struct ContentView: View {
             reward = Int(floor(base * pow(1.1, m / 30.0)))
         }
         coins += max(reward, 0)
+
+        // Set coins earned and show popup
+        coinsEarnedThisSession = reward
+        showCoinPopup = true
+
         notifyCompletion()
         hapticSuccess()
 
         // Push to shared goal
         SharedGoalManager.shared.recordCompletion(seconds: Int(totalSeconds))
+
+        // Update user stats via UserManager
+        UserManager.shared.incrementStats(focusSeconds: Int(totalSeconds), streakedToday: streakIncremented)
     }
 
     // MARK: - Notifications
@@ -276,7 +372,8 @@ struct ContentView: View {
     }
 
     // MARK: - Streak (bumps once per calendar day on first completion)
-    private func bumpStreakIfNeeded() {
+    @discardableResult
+    private func bumpStreakIfNeeded() -> Bool {
         let key = "lastCompletedDay"
         let today = Calendar.current.startOfDay(for: Date())
         let last = UserDefaults.standard.object(forKey: key) as? Date
@@ -284,7 +381,9 @@ struct ContentView: View {
         if last == nil || Calendar.current.compare(last!, to: today, toGranularity: .day) == .orderedAscending {
             streakDays += 1
             UserDefaults.standard.set(today, forKey: key)
+            return true
         }
+        return false
     }
 
     // MARK: - Haptics
@@ -358,17 +457,9 @@ struct OutlinedButtonStyle: ButtonStyle {
 struct SharedProgressView: View {
     let goal: SharedGoal
 
-    // Switch between a campus "sessions" goal or "seconds" goal
-    var useSessionsTarget = true
-
     var progress: Double {
-        if useSessionsTarget {
-            return goalTarget > 0 ? min(1, Double(goal.sessionsCompleted) / Double(goalTarget)) : 0
-        } else {
-            return goalTarget > 0 ? min(1, Double(goal.secondsFocused) / Double(goalTarget)) : 0
-        }
+        goal.goalTarget > 0 ? min(1, Double(goal.secondsFocused) / Double(goal.goalTarget)) : 0
     }
-    var goalTarget: Int { goal.goalTarget }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -387,21 +478,16 @@ struct SharedProgressView: View {
                     Text("\(Int(progress * 100))%")
                         .font(.title2.bold())
                         .monospacedDigit()
-                    if useSessionsTarget {
-                        Text("\(goal.sessionsCompleted) / \(goalTarget) sessions")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    } else {
-                        Text("\(formatSeconds(goal.secondsFocused)) / \(formatSeconds(goalTarget))")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
+                    Text("\(formatSeconds(goal.secondsFocused)) / \(goal.goalTarget / 60) min")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(width: 220, height: 220)
 
             HStack {
-                Label("Sessions: \(goal.sessionsCompleted)", systemImage: "person.3.fill")
+                Label("Focused: \(formatSecondsShort(goal.secondsFocused))", systemImage: "clock")
                 Spacer()
-                Label("Focus: \(formatSecondsShort(goal.secondsFocused))", systemImage: "clock")
             }
             .font(.footnote)
             .foregroundStyle(.secondary)
@@ -421,108 +507,3 @@ struct SharedProgressView: View {
     }
 }
 
-struct ShopView: View {
-    @AppStorage("coins") private var coins: Int = 1000
-    @AppStorage("useMidnightBlueTheme") private var useMidnightBlueTheme: Bool = false
-    @State private var showInsufficientFundsAlert = false
-    struct ShopItem: Identifiable {
-        let id = UUID()
-        let name: String
-        let description: String
-        let cost: Int
-    }
-
-    private let items: [ShopItem] = [
-        .init(name: "Focus Theme: Midnight Blue",
-              description: "A deep, calming color theme for late-night grinds.",
-              cost: 300),
-        .init(name: "Sticker Pack: Study Gremlins",
-              description: "Silly little critters to cheer you on in the UI.",
-              cost: 500),
-        .init(name: "Title: Library Goblin",
-              description: "Show off your streak with a goofy profile title.",
-              cost: 800)
-    ]
-
-    var body: some View {
-        List {
-            Section(header: Text("Your Balance")) {
-                HStack {
-                    Label("Coins: \(coins)", systemImage: "creditcard.circle.fill")
-                        .font(.headline)
-                }
-            }
-            Section(header: Text("UR Focus Shop")) {
-                ForEach(items) { item in
-                    VStack(alignment: .leading, spacing: 8) {
-                        // Determine if this item is already owned (for now, just the Midnight Blue theme)
-                        let isOwned = (item.name == "Focus Theme: Midnight Blue") && useMidnightBlueTheme
-
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.name)
-                                    .font(.headline)
-                                Text(item.description)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Text("\(item.cost) coins")
-                                    .font(.caption.bold())
-                                    .padding(6)
-                                    .background(Color.yellow.opacity(0.2))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                                if isOwned {
-                                    Text("Owned")
-                                        .font(.caption)
-                                        .foregroundStyle(.green)
-                                }
-                            }
-                        }
-
-                        HStack {
-                            Spacer()
-                            Button {
-                                // Prevent re-purchasing owned items
-                                if isOwned {
-                                    return
-                                }
-
-                                // Guard for insufficient funds
-                                guard coins >= item.cost else {
-                                    showInsufficientFundsAlert = true
-                                    return
-                                }
-
-                                // Deduct coins
-                                coins -= item.cost
-
-                                // Apply effects for purchased item(s)
-                                if item.name == "Focus Theme: Midnight Blue" {
-                                    useMidnightBlueTheme = true
-                                }
-                                // TODO: Add unlock logic for other items
-                            } label: {
-                                Label(isOwned ? "Owned" : "Buy",
-                                      systemImage: isOwned ? "checkmark.circle" : "cart.badge.plus")
-                            }
-                            .buttonStyle(FilledButtonStyle(color: Color.accentColor))
-                            .disabled(isOwned)
-                            .opacity(isOwned ? 0.6 : 1.0)
-                            Spacer()
-                        }
-                    }
-                    .padding(.vertical, 6)
-                }
-            }
-        }
-        .navigationTitle("Shop")
-        .alert("Not enough coins", isPresented: $showInsufficientFundsAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("You don’t have enough coins to buy this item yet. Complete more focus sessions to earn more.")
-        }
-    }
-}

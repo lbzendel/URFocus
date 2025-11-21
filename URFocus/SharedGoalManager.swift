@@ -10,10 +10,11 @@ import FirebaseFirestore
 internal import Combine
 
 // Shared goal model (no FirestoreSwift helpers needed)
+// Represents the shared focused time statistics and goal in seconds (e.g., 600,000 seconds = 10,000 minutes)
 struct SharedGoal {
-    var sessionsCompleted: Int
-    var secondsFocused: Int
-    var goalTarget: Int
+    var sessionsCompleted: Int  // Number of completed focus sessions
+    var secondsFocused: Int     // Total focused seconds
+    var goalTarget: Int         // Goal target in seconds (e.g., 600,000 seconds for 10,000 minutes)
     var updatedAt: Timestamp?
 }
 
@@ -36,7 +37,7 @@ final class SharedGoalManager: ObservableObject {
             let g = SharedGoal(
                 sessionsCompleted: data["sessionsCompleted"] as? Int ?? 0,
                 secondsFocused:    data["secondsFocused"] as? Int ?? 0,
-                goalTarget:        data["goalTarget"] as? Int ?? 0,
+                goalTarget:        data["goalTarget"] as? Int ?? 600_000, // fallback to 600,000 seconds (10,000 minutes)
                 updatedAt:         data["updatedAt"] as? Timestamp
             )
             DispatchQueue.main.async { self?.goal = g }
@@ -48,7 +49,9 @@ final class SharedGoalManager: ObservableObject {
         listener = nil
     }
 
-    /// Call this when a user completes a session.
+    /// Call this when a user completes a focused session.
+    /// Increments the total focused time and sessions count.
+    /// Goal is tracked in focused seconds (e.g., 600,000 seconds = 10,000 minutes).
     func recordCompletion(seconds: Int) {
         // Safety bounds (1 min .. 6 hours)
         let safe = max(60, min(seconds, 6 * 3600))

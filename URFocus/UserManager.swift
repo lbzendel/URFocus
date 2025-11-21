@@ -4,6 +4,7 @@ import Foundation
 import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
+internal import Combine
 
 class UserManager: ObservableObject {
     static let shared = UserManager()

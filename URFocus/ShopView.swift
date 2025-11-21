@@ -1,3 +1,11 @@
+//
+//  ShopView.swift
+//  URFocus
+//
+//  Created by Lior Zendel on 11/18/25.
+//
+
+
 import SwiftUI
 
 struct ShopView: View {
