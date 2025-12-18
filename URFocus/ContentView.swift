@@ -21,6 +21,8 @@ struct TimerView: View {
     @AppStorage("streakDays") private var streakDays: Int = 0
     @AppStorage("coins") private var coins: Int = 1000
     @AppStorage("useMidnightBlueTheme") private var useMidnightBlueTheme: Bool = false
+    @AppStorage("useGradientTheme") private var useGradientTheme: Bool = false
+    @AppStorage("selectedBackground") private var selectedBackground: String = "system"
 
     // MARK: - Timer state
     @State private var isRunning = false
@@ -54,8 +56,23 @@ struct TimerView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                (useMidnightBlueTheme ? Color.blue.opacity(0.2) : Color(.systemBackground))
-                    .ignoresSafeArea()
+                Group {
+                    switch selectedBackground {
+                    case "gradient":
+                        LinearGradient(
+                            colors: [Color(red: 255/255, green: 204/255, blue: 0/255), Color(red: 0/255, green: 51/255, blue: 102/255)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .ignoresSafeArea()
+                    case "midnight":
+                        Color.blue.opacity(0.2)
+                            .ignoresSafeArea()
+                    default:
+                        Color(.systemBackground)
+                            .ignoresSafeArea()
+                    }
+                }
 
                 ScrollView {
                     VStack(spacing: 20) {
