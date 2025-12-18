@@ -11,7 +11,7 @@ import FirebaseAuth   // Optional (only if you enabled Anonymous Auth)
 import FirebaseFirestore
 internal import Combine
 
-struct ContentView: View {
+struct TimerView: View {
     // MARK: - Shared goal
     @StateObject private var goalMgr = SharedGoalManager.shared
     @ObservedObject private var userMgr = UserManager.shared
@@ -404,6 +404,21 @@ struct ContentView: View {
     }
 }
 
+struct ContentView: View {
+    var body: some View {
+        TabView {
+            TimerView()
+                .tabItem {
+                    Label("Focus", systemImage: "timer")
+                }
+            TodoListView()
+                .tabItem {
+                    Label("To-dos", systemImage: "checklist")
+                }
+        }
+    }
+}
+
 // MARK: - Helpers
 private extension Double {
     var formattedClock: String {
@@ -507,3 +522,26 @@ struct SharedProgressView: View {
     }
 }
 
+struct PlaceholderTodoListView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "checklist")
+                .imageScale(.large)
+                .font(.system(size: 36))
+                .foregroundStyle(.secondary)
+            Text("To‑do list module not found.")
+                .font(.headline)
+            Text("This is a temporary placeholder. Add your To‑Do feature module or replace this view when ready.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+}
+
+#Preview {
+    ContentView()
+}

@@ -1,5 +1,6 @@
 // New SwiftUI view for a simple to-do list page
 import SwiftUI
+internal import Combine
 
 struct TodoItem: Identifiable, Hashable {
     let id: UUID = UUID()
@@ -8,6 +9,7 @@ struct TodoItem: Identifiable, Hashable {
 }
 
 class TodoListManager: ObservableObject {
+    
     @Published var items: [TodoItem] = []
     @Published var newTask: String = ""
     
@@ -82,3 +84,4 @@ struct TodoListView: View {
 #Preview {
     TodoListView()
 }
+
