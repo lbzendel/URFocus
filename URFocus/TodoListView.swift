@@ -34,6 +34,15 @@ class TodoListManager: ObservableObject {
 struct TodoListView: View {
     @StateObject private var manager = TodoListManager()
     
+    private var sortedItems: [TodoItem] {
+        manager.items.sorted { lhs, rhs in
+            if lhs.isCompleted == rhs.isCompleted {
+                return true
+            }
+            return lhs.isCompleted == false && rhs.isCompleted == true
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             VStack {
@@ -57,7 +66,7 @@ struct TodoListView: View {
                     Spacer()
                 } else {
                     List {
-                        ForEach(manager.items) { item in
+                        ForEach(sortedItems) { item in
                             HStack {
                                 Button(action: { manager.toggleCompleted(for: item) }) {
                                     Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
