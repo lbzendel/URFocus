@@ -2,14 +2,15 @@
 // Handles user onboarding, username, and statistics
 import Foundation
 import SwiftUI
-import FirebaseAuth
-import FirebaseFirestore
 internal import Combine
 
 class UserManager: ObservableObject {
     static let shared = UserManager()
-    private let db = Firestore.firestore()
     @AppStorage("username") var username: String = ""
+    @AppStorage("minutesFocused") private var minutesFocused: Int = 0
+    @AppStorage("sessionsCompleted") private var sessionsCompleted: Int = 0
+    @AppStorage("streakDays") private var streakDays: Int = 0
+    @AppStorage("localUserID") private var localUserID: String = ""
     
     // Username onboarding state
     @Published var showUsernamePrompt: Bool = false
@@ -18,6 +19,9 @@ class UserManager: ObservableObject {
     @Published var isCheckingUsername: Bool = false
     
     init() {
+        if localUserID.isEmpty {
+            localUserID = UUID().uuidString
+        }
         if username.isEmpty {
             showUsernamePrompt = true
         }
@@ -31,49 +35,41 @@ class UserManager: ObservableObject {
         }
         usernameError = nil
         isCheckingUsername = true
-        db.collection("users")
-            .whereField("displayName", isEqualTo: trimmed)
-            .getDocuments { [weak self] snapshot, error in
-                DispatchQueue.main.async {
-                    guard let self = self else { return }
-                    self.isCheckingUsername = false
-                    if let error = error {
-                        self.usernameError = "Error checking username: \(error.localizedDescription)"
-                        return
-                    }
-                    if let snapshot = snapshot, !snapshot.documents.isEmpty {
-                        self.usernameError = "That username is taken"
-                        return
-                    }
-                    guard let uid = Auth.auth().currentUser?.uid else {
-                        self.usernameError = "User not signed in"
-                        return
-                    }
-                    self.db.collection("users").document(uid).setData(["displayName": trimmed], merge: true) { err in
-                        DispatchQueue.main.async {
-                            if let err = err {
-                                self.usernameError = "Failed to save username: \(err.localizedDescription)"
-                                return
-                            }
-                            self.username = trimmed
-                            self.usernameError = nil
-                            self.showUsernamePrompt = false
-                        }
-                    }
-                }
-            }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.username = trimmed
+            self.usernameError = nil
+            self.showUsernamePrompt = false
+            self.isCheckingUsername = false
+            CloudKitService.shared.updateLeaderboardEntry(
+                userID: self.localUserID,
+                displayName: trimmed,
+                minutesFocused: self.minutesFocused,
+                streakDays: self.streakDays,
+                sessionsCompleted: self.sessionsCompleted
+            )
+        }
     }
 
     // Increment stats after a completed session
     func incrementStats(focusSeconds: Int, streakedToday: Bool) {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
-        let doc = db.collection("users").document(uid)
-        var updates: [String: Any] = [
-            "minutesFocused": FieldValue.increment(Int64(focusSeconds/60))
-        ]
+        let minutesDelta = max(0, focusSeconds / 60)
+        minutesFocused += minutesDelta
+        sessionsCompleted += 1
         if streakedToday {
-            updates["streakDays"] = FieldValue.increment(Int64(1))
+            streakDays += 1
         }
-        doc.setData(updates, merge: true)
+
+        CloudKitService.shared.updateLeaderboardEntry(
+            userID: localUserID,
+            displayName: username.isEmpty ? "Focus Friend" : username,
+            minutesFocused: minutesFocused,
+            streakDays: streakDays,
+            sessionsCompleted: sessionsCompleted
+        )
+    }
+
+    func localStats() -> (minutesFocused: Int, sessionsCompleted: Int, streakDays: Int) {
+        (minutesFocused, sessionsCompleted, streakDays)
     }
 }

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import FirebaseFirestore
 internal import Combine
 
 // Shared goal model (no FirestoreSwift helpers needed)
@@ -15,53 +14,54 @@ struct SharedGoal {
     var sessionsCompleted: Int  // Number of completed focus sessions
     var secondsFocused: Int     // Total focused seconds
     var goalTarget: Int         // Goal target in seconds (e.g., 600,000 seconds for 10,000 minutes)
-    var updatedAt: Timestamp?
+    var updatedAt: Date?
 }
 
 final class SharedGoalManager: ObservableObject {
     static let shared = SharedGoalManager()
 
-    private let db = Firestore.firestore()
     @Published var goal: SharedGoal?
-    private var listener: ListenerRegistration?
-
-    private var docRef: DocumentReference {
-        db.collection("shared").document("goal")
-    }
+    private var refreshTimer: Timer?
 
     // Start a realtime listener on the shared goal doc
     func startListening() {
         stopListening()
-        listener = docRef.addSnapshotListener { [weak self] snap, _ in
-            guard let data = snap?.data() else { return }
-            let g = SharedGoal(
-                sessionsCompleted: data["sessionsCompleted"] as? Int ?? 0,
-                secondsFocused:    data["secondsFocused"] as? Int ?? 0,
-                goalTarget:        data["goalTarget"] as? Int ?? 600_000, // fallback to 600,000 seconds (10,000 minutes)
-                updatedAt:         data["updatedAt"] as? Timestamp
-            )
-            DispatchQueue.main.async { self?.goal = g }
+        fetchSharedGoal()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.fetchSharedGoal()
         }
     }
 
     func stopListening() {
-        listener?.remove()
-        listener = nil
+        refreshTimer?.invalidate()
+        refreshTimer = nil
     }
 
     /// Call this when a user completes a focused session.
     /// Increments the total focused time and sessions count.
     /// Goal is tracked in focused seconds (e.g., 600,000 seconds = 10,000 minutes).
     func recordCompletion(seconds: Int) {
-        // Safety bounds (1 min .. 6 hours)
-        let safe = max(60, min(seconds, 6 * 3600))
-        docRef.updateData([
-            "sessionsCompleted": FieldValue.increment(Int64(1)),
-            "secondsFocused": FieldValue.increment(Int64(safe)),
-            "updatedAt": FieldValue.serverTimestamp()
-        ]) { err in
-            if let err = err {
-                print("Increment failed: \(err)")
+        CloudKitService.shared.recordSharedCompletion(seconds: seconds) { [weak self] result in
+            switch result {
+            case .success(let goal):
+                DispatchQueue.main.async {
+                    self?.goal = goal
+                }
+            case .failure(let error):
+                print("CloudKit shared goal update failed: \(error)")
+            }
+        }
+    }
+
+    private func fetchSharedGoal() {
+        CloudKitService.shared.fetchSharedGoal { [weak self] result in
+            switch result {
+            case .success(let goal):
+                DispatchQueue.main.async {
+                    self?.goal = goal
+                }
+            case .failure(let error):
+                print("CloudKit shared goal fetch failed: \(error)")
             }
         }
     }

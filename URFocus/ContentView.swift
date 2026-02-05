@@ -7,8 +7,6 @@
 
 import SwiftUI
 import UserNotifications
-import FirebaseAuth   // Optional (only if you enabled Anonymous Auth)
-import FirebaseFirestore
 internal import Combine
 
 struct TimerView: View {
@@ -211,7 +209,6 @@ struct TimerView: View {
             }
             .onAppear {
                 now = .now
-                ensureSignedInAnonymously() // optional
                 goalMgr.startListening()
                 if userMgr.username.isEmpty {
                     userMgr.showUsernamePrompt = true
@@ -443,15 +440,6 @@ private extension Double {
         let m = total / 60
         let s = total % 60
         return String(format: "%02d:%02d", m, s)
-    }
-}
-
-// MARK: - Auth (optional anonymous sign-in)
-func ensureSignedInAnonymously() {
-    if Auth.auth().currentUser == nil {
-        Auth.auth().signInAnonymously { _, err in
-            if let err = err { print("Anon sign-in failed: \(err)") }
-        }
     }
 }
 
