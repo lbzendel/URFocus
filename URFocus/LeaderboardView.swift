@@ -1,7 +1,6 @@
 // LeaderboardView.swift
 // Displays top X all-time leaders in minutes focused and daily streaks
 import SwiftUI
-import FirebaseFirestore
 
 struct LeaderboardEntry: Identifiable, Hashable {
     let id: String
@@ -56,9 +55,7 @@ struct LeaderboardView: View {
         }
     }
 
-    // Fetch top X leaders from Firestore (adapt collection/field names as needed)
     private func fetchLeaderboard() {
-        let db = Firestore.firestore()
         loading = true
         
         var didLoadMinutes = false
@@ -70,45 +67,32 @@ struct LeaderboardView: View {
             }
         }
         
-        // Fetch top by minutesFocused
-        db.collection("users")
-            .order(by: "minutesFocused", descending: true)
-            .limit(to: topCount)
-            .getDocuments { (snap, err) in
-                let entries = snap?.documents.compactMap { doc in
-                    let data = doc.data()
-                    return LeaderboardEntry(
-                        id: doc.documentID,
-                        displayName: data["displayName"] as? String ?? "(anon)",
-                        minutesFocused: data["minutesFocused"] as? Int ?? 0,
-                        streakDays: data["streakDays"] as? Int ?? 0
-                    )
-                } ?? []
-                DispatchQueue.main.async {
-                    self.topMinutes = entries as! [LeaderboardEntry]
-                    didLoadMinutes = true
-                    checkLoadingComplete()
+        CloudKitService.shared.fetchLeaderboard(sortedBy: "minutesFocused", limit: topCount) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let entries):
+                    self.topMinutes = entries
+                case .failure(let error):
+                    print("Leaderboard minutes fetch failed: \(error)")
+                    self.topMinutes = []
                 }
+                didLoadMinutes = true
+                checkLoadingComplete()
             }
-        // Fetch top by streakDays
-        db.collection("users")
-            .order(by: "streakDays", descending: true)
-            .limit(to: topCount)
-            .getDocuments { (snap, err) in
-                let entries = snap?.documents.compactMap { doc in
-                    let data = doc.data()
-                    return LeaderboardEntry(
-                        id: doc.documentID,
-                        displayName: data["displayName"] as? String ?? "(anon)",
-                        minutesFocused: data["minutesFocused"] as? Int ?? 0,
-                        streakDays: data["streakDays"] as? Int ?? 0
-                    )
-                } ?? []
-                DispatchQueue.main.async {
-                    self.topStreaks = entries as! [LeaderboardEntry]
-                    didLoadStreaks = true
-                    checkLoadingComplete()
+        }
+
+        CloudKitService.shared.fetchLeaderboard(sortedBy: "streakDays", limit: topCount) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let entries):
+                    self.topStreaks = entries
+                case .failure(let error):
+                    print("Leaderboard streaks fetch failed: \(error)")
+                    self.topStreaks = []
                 }
+                didLoadStreaks = true
+                checkLoadingComplete()
             }
+        }
     }
 }
