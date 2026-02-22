@@ -74,13 +74,12 @@ This app relies on CloudKit public database records:
   - `sessionsCompleted` (Int)
   - `updatedAt` (Date)
 
-Ensure your Apple Developer CloudKit container/capabilities are configured for the app target.
 
 ## Notes
 
 - Focus and profile state is stored locally via `@AppStorage`.
 - Shared stats and leaderboard are network-backed via CloudKit.
-- Firebase packages are present in the Xcode project file, but current app logic uses CloudKit services.
+- Prev. versions used Firebase packages but current app logic before switching to Cloudkit.
 
 ## License
 
