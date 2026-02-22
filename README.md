@@ -80,7 +80,3 @@ This app relies on CloudKit public database records:
 - Focus and profile state is stored locally via `@AppStorage`.
 - Shared stats and leaderboard are network-backed via CloudKit.
 - Prev. versions used Firebase packages but current app logic before switching to Cloudkit.
-
-## License
-
-Add your preferred license here (for example: MIT).
